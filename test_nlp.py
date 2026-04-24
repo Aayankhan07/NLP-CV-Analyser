@@ -35,7 +35,8 @@ def test_nlp():
     print("\nScoring CV against JD...")
     scoring = score_cv(facts, sample_text, jd_text, nlp)
     print("Overall Score:", scoring["overall_score"])
-    print("Semantic Relevance:", scoring["category_scores"]["Semantic Relevance"])
+    print("Smart Skill Match:", scoring["category_scores"].get("Smart Skill Match", scoring["category_scores"].get("Semantic Relevance", 0)))
+    print("Contextual Experience:", scoring["category_scores"].get("Contextual Experience", 0))
     print("Missing Concepts:", scoring["missing_skills"])
     print("Suggestions:", scoring["suggestions"])
 

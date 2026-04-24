@@ -14,8 +14,9 @@ def score_cv(cv_facts: dict, cv_text: str, jd_text: str, nlp) -> dict:
 
     if cv_filt_doc.has_vector and jd_filt_doc.has_vector:
         base_similarity = cv_filt_doc.similarity(jd_filt_doc)
-        # Apply exponential penalty: ((Similarity - 0.65) / 0.35)^3 * 100
-        adjusted_sim = max(0.0, (base_similarity - 0.65) / 0.35)
+        # EXTREME SCALING: We map the range [0.70, 0.85] to [0.0, 1.0].
+        # Anything below 0.70 base similarity is basically 0%.
+        adjusted_sim = max(0.0, min(1.0, (base_similarity - 0.70) / 0.15))
         relevance_score = (adjusted_sim ** 3) * 100.0
     else:
         relevance_score = 0.0
