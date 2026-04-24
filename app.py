@@ -58,7 +58,7 @@ with c1:
                 for uploaded_file in uploaded_files:
                     cv_text = parse_file(uploaded_file, uploaded_file.name)
                     if cv_text.strip():
-                        facts = extract_all_facts(cv_text, nlp)
+                        facts = extract_all_facts(cv_text, nlp, jd_text)
                         scoring = score_cv(facts, cv_text, jd_text, nlp)
                         feedback = generate_feedback(facts, scoring)
                         results.append({
@@ -81,13 +81,14 @@ with c2:
                 "filename": "Aaryan_Dev.pdf",
                 "score": 85,
                 "cv_text": "Aaryan Dev\nExperience: 6 Years\nConcepts: Python, Streamlit, Machine Learning...",
-                "facts": {"email": "aaryan@dev.com", "phone": "+92 300 1234567", "experience": "6 Years", "skills": ["python", "streamlit", "machine learning", "data pipelines"]},
+                "facts": {"email": "aaryan@dev.com", "phone": "+92 300 1234567", "experience": {"total_years": 6, "contextual_years": 6}, "skills": ["python", "streamlit", "machine learning", "data pipelines"]},
                 "scoring": {
                     "overall_score": 85,
-                    "category_scores": {"Semantic Relevance": 85, "Structure": 90, "Action_Verbs": 85, "Metrics": 80},
+                    "category_scores": {"Smart Skill Match": 85, "Contextual Experience": 100, "Metrics & Structure": 90, "Action Verbs": 85, "Extra Skills": 0},
                     "matching_skills": ["python", "streamlit"],
                     "missing_skills": ["docker containerization", "ci/cd"],
-                    "required_skills": []
+                    "required_skills": [],
+                    "is_unqualified": False
                 },
                 "feedback": ["Consider adding metrics to your recent role."]
             }
@@ -108,7 +109,9 @@ if st.session_state.analysis_results:
         name = res["filename"]
         email = res["facts"]["email"] or "N/A"
         
-        with st.expander(f"Rank {rank} | {name} | Score: {score}% | {email}", expanded=False):
+        status_icon = "🚨" if res["scoring"].get("is_unqualified") else "✅"
+        
+        with st.expander(f"{status_icon} Rank {rank} | {name} | Score: {score}% | {email}", expanded=False):
             
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["Score Overview", "Semantic Alignment", "Advanced Insights", "Suggestions", "Raw Text"])
             
@@ -116,18 +119,27 @@ if st.session_state.analysis_results:
                 det_col1, det_col2 = st.columns(2)
                 
                 with det_col1:
-                    st.metric("Semantic Match Score", f"{score}%")
-                    st.progress(score / 100.0)
+                    if res["scoring"].get("is_unqualified"):
+                        st.error("🚨 UNQUALIFIED: <30% Semantic Match. Scoring Halted.")
+                        
+                    st.metric("Hybrid Match Score", f"{score}%")
+                    st.progress(max(0.0, min(1.0, score / 100.0)))
                     st.write("**Candidate Details:**")
                     st.write(f"- 📧 Email: {email}")
                     st.write(f"- 📞 Phone: {res['facts']['phone'] or 'Not Found'}")
-                    st.write(f"- ⏱️ Experience: {res['facts']['experience'] or 'Not Found'}")
+                    
+                    exp = res['facts'].get('experience', {})
+                    if isinstance(exp, dict):
+                        st.write(f"- ⏱️ Total Exp: {exp.get('total_years', 0)} years")
+                        st.write(f"- 🎯 Contextual Exp: {exp.get('contextual_years', 0)} years")
+                    else:
+                        st.write(f"- ⏱️ Experience: {exp or 'Not Found'}")
                 
                 with det_col2:
                     st.write("**Category Breakdown:**")
                     for cat, val in res["scoring"]["category_scores"].items():
-                        st.write(f"{cat.replace('_', ' ').title()}")
-                        st.progress(val / 100.0)
+                        st.write(f"{cat}")
+                        st.progress(max(0.0, min(1.0, val / 100.0)))
             
             with tab2:
                 sk_col1, sk_col2 = st.columns(2)

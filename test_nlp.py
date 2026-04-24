@@ -27,7 +27,7 @@ def test_nlp():
     """
     
     print("Extracting all facts...")
-    facts = extract_all_facts(sample_text, nlp)
+    facts = extract_all_facts(sample_text, nlp, jd_text)
     print("Facts extracted:")
     for k, v in facts.items():
         print(f" - {k}: {v}")
