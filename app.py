@@ -10,6 +10,7 @@ st.set_page_config(page_title="FlashCV Pro", page_icon="📄", layout="wide")
 
 # --- Resource Loading ---
 import spacy
+import spacy.cli
 
 @st.cache_resource
 def load_resources():
@@ -19,7 +20,6 @@ def load_resources():
     try:
         nlp = spacy.load("en_core_web_sm")
     except OSError:
-        import spacy.cli
         spacy.cli.download("en_core_web_sm")
         nlp = spacy.load("en_core_web_sm")
         
