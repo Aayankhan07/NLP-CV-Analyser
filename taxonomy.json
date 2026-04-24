@@ -1,0 +1,23 @@
+{
+  "action_verbs": [
+    "managed", "developed", "designed", "led", "improved", "increased", 
+    "decreased", "created", "built", "implemented", "delivered", "achieved",
+    "optimized", "spearheaded", "orchestrated", "engineered", "launched",
+    "analyzed", "resolved", "coordinated", "facilitated", "streamlined",
+    "innovated", "maximized", "negotiated", "secured", "transformed",
+    "executed", "pioneered", "mentored", "trained"
+  ],
+  "weak_phrases": [
+    "responsible for", "duties included", "worked on", "helped with",
+    "assisted in", "in charge of", "handled", "tried to", "tasked with",
+    "was a part of", "participated in", "contributed to", "good at",
+    "hard worker", "team player", "detail oriented", "results driven"
+  ],
+  "section_headers": {
+    "experience": ["experience", "employment", "work history", "professional experience", "work experience"],
+    "education": ["education", "academic background", "degrees", "university"],
+    "skills": ["skills", "technical skills", "core competencies", "technologies"],
+    "projects": ["projects", "personal projects", "academic projects", "portfolio"],
+    "certifications": ["certifications", "licenses", "courses", "training"]
+  }
+}

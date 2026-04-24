@@ -1,0 +1,17 @@
+{
+  "Python": ["python", "py", "python3"],
+  "JavaScript": ["javascript", "js", "es6", "node.js", "nodejs"],
+  "TypeScript": ["typescript", "ts"],
+  "Java": ["java", "java 8", "java 11"],
+  "C++": ["c++", "cpp", "c plus plus"],
+  "React": ["react", "react.js", "reactjs", "react native"],
+  "Angular": ["angular", "angular.js", "angularjs"],
+  "SQL": ["sql", "mysql", "postgresql", "postgres", "sql server"],
+  "NoSQL": ["nosql", "mongodb", "mongo", "cassandra", "dynamodb"],
+  "AWS": ["aws", "amazon web services", "ec2", "s3"],
+  "Docker": ["docker", "containerization", "docker-compose"],
+  "Kubernetes": ["kubernetes", "k8s"],
+  "Git": ["git", "github", "gitlab", "bitbucket", "version control"],
+  "Machine Learning": ["machine learning", "ml", "scikit-learn", "tensorflow", "pytorch"],
+  "Data Analysis": ["data analysis", "pandas", "numpy", "data analytics"]
+}
