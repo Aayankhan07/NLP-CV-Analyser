@@ -24,26 +24,58 @@ def extract_phone(nlp, doc):
             return doc[start:i+1].text.strip()
     return None
 
-def extract_experience(nlp, doc):
-    years = []
-    for token in doc:
-        if token.lemma_.lower() in ["year", "yr", "years", "yrs"]:
-            for child in token.children:
-                if child.pos_ == "NUM" or child.like_num:
-                    try:
-                        years.append(int(child.text))
-                    except ValueError:
-                        pass
-            if token.i > 0:
-                prev_token = doc[token.i - 1]
-                if prev_token.pos_ == "NUM" or prev_token.like_num:
-                    try:
-                        years.append(int(prev_token.text))
-                    except ValueError:
-                        pass
-    if years:
-        return f"{max(years)} years"
-    return None
+def extract_experience(nlp, doc, jd_doc=None):
+    blocks = doc.text.split('\n')
+    contextual_years = 0
+    total_years = 0
+    
+    for block in blocks:
+        if not block.strip():
+            continue
+            
+        block_doc = nlp(block)
+        block_years = []
+        for token in block_doc:
+            if token.lemma_.lower() in ["year", "yr", "years", "yrs"]:
+                for child in token.children:
+                    if child.pos_ == "NUM" or child.like_num:
+                        try:
+                            block_years.append(int(child.text))
+                        except ValueError:
+                            pass
+                if token.i > 0:
+                    prev_token = block_doc[token.i - 1]
+                    if prev_token.pos_ == "NUM" or prev_token.like_num:
+                        try:
+                            block_years.append(int(prev_token.text))
+                        except ValueError:
+                            pass
+                            
+        if block_years:
+            years = max(block_years)
+            # If the block has a crazy number, ignore it
+            if years > 50:
+                continue
+                
+            total_years += years
+            
+            # Contextual validation
+            if jd_doc:
+                jd_filt = nlp(" ".join([t.lemma_.lower() for t in jd_doc.noun_chunks if not t.root.is_stop]))
+                block_filt = nlp(" ".join([t.lemma_.lower() for t in block_doc.noun_chunks if not t.root.is_stop]))
+                
+                if block_filt.has_vector and jd_filt.has_vector and len(block_filt) > 0:
+                    sim = block_filt.similarity(jd_filt)
+                    if sim > 0.40: # Semantic threshold for a block to be "relevant"
+                        contextual_years += years
+            else:
+                contextual_years += years
+
+    return {
+        "total_years": total_years,
+        "contextual_years": contextual_years
+    }
+
 
 def extract_skills(nlp, doc):
     # Extract noun chunks that aren't purely stop words as conceptual skills
@@ -103,14 +135,44 @@ def analyze_timeline(nlp, doc):
                 break
     return {"career_gaps_detected": gaps, "years_found": years}
 
-def extract_all_facts(text: str, nlp) -> dict:
+def extract_jd_requirements(jd_text, nlp):
+    jd_doc = nlp(jd_text)
+    req_years = 2 # Default to 2 if no explicit requirement found
+    
+    for token in jd_doc:
+        if token.lemma_.lower() in ["year", "yr", "years", "yrs"]:
+            # Check children
+            for child in token.children:
+                if child.pos_ == "NUM" or child.like_num:
+                    try:
+                        req_years = max(req_years, int(child.text))
+                    except ValueError:
+                        pass
+            # Check previous token
+            if token.i > 0:
+                prev_token = jd_doc[token.i - 1]
+                if prev_token.pos_ == "NUM" or prev_token.like_num:
+                    try:
+                        req_years = max(req_years, int(prev_token.text))
+                    except ValueError:
+                        pass
+    return {"required_years": req_years}
+
+def extract_all_facts(text: str, nlp, jd_text: str = None) -> dict:
     doc = nlp(text)
-    return {
+    jd_doc = nlp(jd_text) if jd_text else None
+    
+    facts = {
         "email": extract_email(nlp, doc),
         "phone": extract_phone(nlp, doc),
-        "experience": extract_experience(nlp, doc),
+        "experience": extract_experience(nlp, doc, jd_doc),
         "skills": extract_skills(nlp, doc),
         "sections": extract_sections(nlp, doc),
         "experience_quality": analyze_experience(nlp, doc),
         "timeline": analyze_timeline(nlp, doc)
     }
+    
+    if jd_doc:
+        facts["jd_requirements"] = extract_jd_requirements(jd_text, nlp)
+        
+    return facts
