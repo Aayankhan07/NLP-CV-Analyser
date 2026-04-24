@@ -3,12 +3,11 @@ import os
 import spacy
 
 from extractor import extract_experience, analyze_experience, analyze_timeline, extract_all_facts
-from parser import parse_pdf
-from flashtext import KeywordProcessor
+from scorer import score_cv
 
 def test_nlp():
     print("Loading spaCy...")
-    nlp = spacy.load("en_core_web_sm")
+    nlp = spacy.load("en_core_web_md")
     print("spaCy loaded.")
     
     sample_text = """
@@ -16,24 +15,29 @@ def test_nlp():
     Email: aaryan@dev.com
     Phone: +92 300 1234567
     
-    Experience
+    WORK EXPERIENCE
     Software Engineer at TechCorp (2018 - 2024)
     I managed a team of developers and optimized the database queries resulting in 30% performance boost and $50k cost savings.
     I have 6 years of experience in Python and Streamlit.
     """
     
-    print("Extracting experience...")
-    exp = extract_experience(sample_text, nlp)
-    print("Experience:", exp)
+    jd_text = """
+    We are looking for a Software Engineer with experience in Python, web development, and database optimization.
+    Must have strong management skills and be able to deliver performance boosts.
+    """
     
-    print("Analyzing experience quality...")
-    quality = analyze_experience(sample_text, None, nlp)
-    print("Action verbs:", quality["action_verbs"])
-    print("Metrics count:", quality["metrics_count"])
-    
-    print("Analyzing timeline...")
-    timeline = analyze_timeline(sample_text, nlp)
-    print("Timeline:", timeline)
+    print("Extracting all facts...")
+    facts = extract_all_facts(sample_text, nlp)
+    print("Facts extracted:")
+    for k, v in facts.items():
+        print(f" - {k}: {v}")
+        
+    print("\nScoring CV against JD...")
+    scoring = score_cv(facts, sample_text, jd_text, nlp)
+    print("Overall Score:", scoring["overall_score"])
+    print("Semantic Relevance:", scoring["category_scores"]["Semantic Relevance"])
+    print("Missing Concepts:", scoring["missing_skills"])
+    print("Suggestions:", scoring["suggestions"])
 
 if __name__ == "__main__":
     test_nlp()

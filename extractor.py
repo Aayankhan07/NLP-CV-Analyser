@@ -1,57 +1,35 @@
-import re
-import json
-from flashtext import KeywordProcessor
+import spacy
+from spacy.matcher import Matcher
 
-def load_taxonomy(path="taxonomy.json"):
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Error loading {path}: {e}")
-        return {}
-
-def extract_email(text: str) -> str:
-    """
-    Extracts the first email address found in the text using a regular expression.
-    """
-    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-    match = re.search(email_pattern, text)
-    return match.group(0) if match else None
-
-def extract_phone(text: str) -> str:
-    """
-    Extracts the first phone number found in the text using a regular expression.
-    This pattern looks for international or domestic numbers with varying separators.
-    """
-    # A generic phone pattern: handles optional +, country codes, parentheses, and dashes/spaces
-    phone_pattern = r'(\+?\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}'
-    match = re.search(phone_pattern, text)
-    if match:
-        # Check if the extracted string has enough digits to be a real phone number
-        digits = re.sub(r'\D', '', match.group(0))
-        if len(digits) >= 10:
-            return match.group(0)
+def extract_email(nlp, doc):
+    for token in doc:
+        if token.like_email:
+            return token.text
     return None
 
-def extract_experience(text: str, nlp) -> str:
-    """
-    Extracts total years of experience using spaCy NLP (Dependency Parsing / POS).
-    Looks for numerical tokens linked to 'year' or 'yr'.
-    """
-    doc = nlp(text)
+def extract_phone(nlp, doc):
+    # Pure NLP pattern matching for phone numbers using spaCy Matcher
+    # Removes regex. Looks for sequences of numbers and common punctuation.
+    matcher = Matcher(nlp.vocab)
+    pattern1 = [{"SHAPE": "ddd"}, {"TEXT": "-", "OP": "?"}, {"SHAPE": "ddd"}, {"TEXT": "-", "OP": "?"}, {"SHAPE": "dddd"}]
+    pattern2 = [{"TEXT": "+"}, {"SHAPE": "dd"}, {"SHAPE": "ddd"}, {"SHAPE": "ddddddd"}] 
+    matcher.add("PHONE", [pattern1, pattern2])
+    matches = matcher(doc)
+    if matches:
+        match_id, start, end = matches[0]
+        return doc[start:end].text
+    return None
+
+def extract_experience(nlp, doc):
     years = []
-    
     for token in doc:
         if token.lemma_.lower() in ["year", "yr", "years", "yrs"]:
-            # Check direct children for numbers
             for child in token.children:
                 if child.pos_ == "NUM" or child.like_num:
                     try:
                         years.append(int(child.text))
                     except ValueError:
                         pass
-            
-            # Check previous token if child didn't catch it
             if token.i > 0:
                 prev_token = doc[token.i - 1]
                 if prev_token.pos_ == "NUM" or prev_token.like_num:
@@ -59,112 +37,76 @@ def extract_experience(text: str, nlp) -> str:
                         years.append(int(prev_token.text))
                     except ValueError:
                         pass
-                        
     if years:
         return f"{max(years)} years"
     return None
 
-def get_keyword_processor(skills_json_path: str = "skills.json") -> KeywordProcessor:
-    """
-    Initializes a FlashText KeywordProcessor with skills from a JSON file.
-    """
-    keyword_processor = KeywordProcessor()
-    
-    try:
-        with open(skills_json_path, 'r', encoding='utf-8') as f:
-            skills_dict = json.load(f)
-            
-        # flashtext add_keywords_from_dict expects the format:
-        # {"Skill Name": ["synonym1", "synonym2", ...]}
-        keyword_processor.add_keywords_from_dict(skills_dict)
-    except Exception as e:
-        print(f"Error loading {skills_json_path}: {e}")
-        
-    return keyword_processor
+def extract_skills(nlp, doc):
+    # Extract noun chunks that aren't purely stop words as conceptual skills
+    concepts = set()
+    for chunk in doc.noun_chunks:
+        if not chunk.root.is_stop and chunk.root.pos_ in ["NOUN", "PROPN"]:
+            concepts.add(chunk.lemma_.lower().strip())
+    return list(concepts)
 
-def extract_skills(text: str, keyword_processor: KeywordProcessor) -> set:
-    """
-    Extracts skills from text using FlashText and returns a unique set.
-    """
-    # Extract keywords; FlashText will return the standardized key (e.g., "Python")
-    found_skills = keyword_processor.extract_keywords(text)
-    return set(found_skills)
+def extract_sections(nlp, doc):
+    # NLP approach to find headers: short noun phrases that are title-cased or fully uppercase
+    sections = set()
+    for chunk in doc.noun_chunks:
+        if len(chunk) <= 3 and (chunk.text.isupper() or chunk.text.istitle()):
+            sections.add(chunk.text.strip())
+    return {"sections_found": list(sections)}
 
-def extract_sections(text: str, taxonomy: dict) -> dict:
-    sections_found = set()
-    if not taxonomy: return {"sections_found": []}
-    for section, headers in taxonomy.get("section_headers", {}).items():
-        for header in headers:
-            if re.search(r'\b' + re.escape(header) + r'\b', text, re.IGNORECASE):
-                sections_found.add(section)
-                break
-    return {"sections_found": list(sections_found)}
-
-def analyze_experience(text: str, taxonomy: dict, nlp) -> dict:
+def analyze_experience(nlp, doc):
     action_verbs_found = set()
     weak_phrases_found = set()
+    metrics_count = 0
     
-    doc = nlp(text)
-    
-    # Use NLP POS tagging to find verbs dynamically instead of a hardcoded taxonomy list
     for token in doc:
         if token.pos_ == "VERB" and token.is_alpha and len(token.text) > 2:
             action_verbs_found.add(token.lemma_.lower())
-            
-        # Detect passive voice as a "weak phrase" using dependency parsing
         if token.dep_ == "auxpass":
             weak_phrases_found.add(f"Passive voice: '{token.head.text}'")
             
-    # Fallback to taxonomy for specific weak phrases if they exist
-    if taxonomy:
-        for phrase in taxonomy.get("weak_phrases", []):
-            if re.search(r'\b' + re.escape(phrase) + r'\b', text, re.IGNORECASE):
-                weak_phrases_found.add(phrase)
-                
-    # Detect metrics (percentages, currencies, multipliers)
-    metrics = re.findall(r'(\$\d+[mMkK]?|\d+%|\d+x)', text, re.IGNORECASE)
-    
-    # Cap the list size
-    action_verbs_list = list(action_verbs_found)[:50]
-    
+    # Use NER for metrics
+    for ent in doc.ents:
+        if ent.label_ in ["MONEY", "PERCENT", "CARDINAL"]:
+            metrics_count += 1
+            
     return {
-        "action_verbs": action_verbs_list,
+        "action_verbs": list(action_verbs_found)[:50],
         "weak_phrases": list(weak_phrases_found),
-        "metrics_count": len(metrics)
+        "metrics_count": metrics_count
     }
 
-def analyze_timeline(text: str, nlp) -> dict:
-    doc = nlp(text)
+def analyze_timeline(nlp, doc):
     years = set()
-    
-    # Extract years dynamically using Named Entity Recognition for DATE labels
     for ent in doc.ents:
         if ent.label_ == "DATE":
-            # Extract possible years from the date entity
-            extracted_years = re.findall(r'\b(19\d{2}|20\d{2})\b', ent.text)
-            for y in extracted_years:
-                years.add(int(y))
-
+            # Just extract 4 digit tokens without regex
+            for token in ent:
+                if token.like_num and len(token.text) == 4:
+                    try:
+                        years.add(int(token.text))
+                    except ValueError:
+                        pass
     years = sorted(list(years))
     gaps = False
     if len(years) > 1:
-        # Check if max gap > 2 years
         for i in range(1, len(years)):
             if years[i] - years[i-1] > 2:
                 gaps = True
                 break
     return {"career_gaps_detected": gaps, "years_found": years}
 
-def extract_all_facts(text: str, keyword_processor: KeywordProcessor, taxonomy: dict = None, nlp=None) -> dict:
-    """
-    Extracts all facts from the CV text using hybrid NLP and rules.
-    """
+def extract_all_facts(text: str, nlp) -> dict:
+    doc = nlp(text)
     return {
-        "email": extract_email(text),
-        "phone": extract_phone(text),
-        "experience": extract_experience(text, nlp),
-        "skills": extract_skills(text, keyword_processor),
-        "sections": extract_sections(text, taxonomy),
-        "experience_quality": analyze_experience(text, taxonomy, nlp),
-        "timeline": analyze_timeline(text, nlp)
+        "email": extract_email(nlp, doc),
+        "phone": extract_phone(nlp, doc),
+        "experience": extract_experience(nlp, doc),
+        "skills": extract_skills(nlp, doc),
+        "sections": extract_sections(nlp, doc),
+        "experience_quality": analyze_experience(nlp, doc),
+        "timeline": analyze_timeline(nlp, doc)
     }

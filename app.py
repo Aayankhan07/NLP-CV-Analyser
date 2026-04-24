@@ -2,11 +2,11 @@ import streamlit as st
 import os
 import pandas as pd
 from parser import parse_file
-from extractor import get_keyword_processor, extract_all_facts, load_taxonomy
+from extractor import extract_all_facts
 from scorer import score_cv, generate_feedback
 
 # --- Page Config ---
-st.set_page_config(page_title="FlashCV Pro", page_icon="📄", layout="wide")
+st.set_page_config(page_title="FlashCV Pro (NLP Engine)", page_icon="📄", layout="wide")
 
 # --- Resource Loading ---
 import spacy
@@ -14,22 +14,18 @@ import spacy.cli
 
 @st.cache_resource
 def load_resources():
-    kp = get_keyword_processor("skills.json") if os.path.exists("skills.json") else None
-    tax = load_taxonomy("taxonomy.json") if os.path.exists("taxonomy.json") else {}
-    
     try:
-        nlp = spacy.load("en_core_web_sm")
+        nlp = spacy.load("en_core_web_md")
     except OSError:
-        spacy.cli.download("en_core_web_sm")
-        nlp = spacy.load("en_core_web_sm")
-        
-    return kp, tax, nlp
+        spacy.cli.download("en_core_web_md")
+        nlp = spacy.load("en_core_web_md")
+    return nlp
 
-keyword_processor, taxonomy, nlp = load_resources()
+nlp = load_resources()
 
 # --- App Header ---
 st.title("📄 FlashCV Pro")
-st.markdown("Advanced Deterministic CV Intelligence & Ranking Engine")
+st.markdown("Advanced NLP-Driven Semantic CV Engine")
 st.divider()
 
 # --- Top Section: Inputs ---
@@ -58,12 +54,12 @@ with c1:
             st.warning("Please upload at least one CV.")
         else:
             results = []
-            with st.spinner("Analyzing CVs..."):
+            with st.spinner("Running Semantic NLP Analysis..."):
                 for uploaded_file in uploaded_files:
                     cv_text = parse_file(uploaded_file, uploaded_file.name)
                     if cv_text.strip():
-                        facts = extract_all_facts(cv_text, keyword_processor, taxonomy, nlp)
-                        scoring = score_cv(facts, jd_text, keyword_processor)
+                        facts = extract_all_facts(cv_text, nlp)
+                        scoring = score_cv(facts, cv_text, jd_text, nlp)
                         feedback = generate_feedback(facts, scoring)
                         results.append({
                             "filename": uploaded_file.name,
@@ -83,31 +79,17 @@ with c2:
         st.session_state.analysis_results = [
             {
                 "filename": "Aaryan_Dev.pdf",
-                "score": 92,
-                "cv_text": "Aaryan Dev\nExperience: 6 Years\nSkills: Python, Streamlit, SQL...",
-                "facts": {"email": "aaryan@dev.com", "phone": "+92 300 1234567", "experience": "6 Years", "skills": {"Python", "Streamlit", "SQL"}},
+                "score": 85,
+                "cv_text": "Aaryan Dev\nExperience: 6 Years\nConcepts: Python, Streamlit, Machine Learning...",
+                "facts": {"email": "aaryan@dev.com", "phone": "+92 300 1234567", "experience": "6 Years", "skills": ["python", "streamlit", "machine learning", "data pipelines"]},
                 "scoring": {
-                    "overall_score": 92,
-                    "category_scores": {"Relevance": 95, "Structure": 90, "Action_Verbs": 85, "Metrics": 80},
-                    "matching_skills": ["Python", "Streamlit"],
-                    "missing_skills": ["Docker"],
-                    "required_skills": {"Python", "Streamlit", "Docker"}
+                    "overall_score": 85,
+                    "category_scores": {"Semantic Relevance": 85, "Structure": 90, "Action_Verbs": 85, "Metrics": 80},
+                    "matching_skills": ["python", "streamlit"],
+                    "missing_skills": ["docker containerization", "ci/cd"],
+                    "required_skills": []
                 },
-                "feedback": ["Great resume.", "Consider adding Docker projects."]
-            },
-            {
-                "filename": "Sample_CV_02.docx",
-                "score": 68,
-                "cv_text": "Sample Candidate\nExperience: 2 Years\nSkills: Python, HTML...",
-                "facts": {"email": "sample@test.com", "phone": "N/A", "experience": "2 Years", "skills": {"Python", "HTML"}},
-                "scoring": {
-                    "overall_score": 68,
-                    "category_scores": {"Relevance": 60, "Structure": 75, "Action_Verbs": 70, "Metrics": 50},
-                    "matching_skills": ["Python"],
-                    "missing_skills": ["Streamlit", "SQL"],
-                    "required_skills": {"Python", "Streamlit", "SQL"}
-                },
-                "feedback": ["Need more focus on data tools.", "Quantify your achievements."]
+                "feedback": ["Consider adding metrics to your recent role."]
             }
         ]
 
@@ -126,16 +108,15 @@ if st.session_state.analysis_results:
         name = res["filename"]
         email = res["facts"]["email"] or "N/A"
         
-        # Expander acts as the interactive leaderboard row
         with st.expander(f"Rank {rank} | {name} | Score: {score}% | {email}", expanded=False):
             
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Score Overview", "Skill Alignment", "Advanced Insights", "Suggestions", "Raw Text"])
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Score Overview", "Semantic Alignment", "Advanced Insights", "Suggestions", "Raw Text"])
             
             with tab1:
                 det_col1, det_col2 = st.columns(2)
                 
                 with det_col1:
-                    st.metric("Overall Match Score", f"{score}%")
+                    st.metric("Semantic Match Score", f"{score}%")
                     st.progress(score / 100.0)
                     st.write("**Candidate Details:**")
                     st.write(f"- 📧 Email: {email}")
@@ -151,19 +132,19 @@ if st.session_state.analysis_results:
             with tab2:
                 sk_col1, sk_col2 = st.columns(2)
                 with sk_col1:
-                    st.write("**Matching Skills:**")
+                    st.write("**Matched Semantic Concepts:**")
                     if res["scoring"]["matching_skills"]:
                         for s in res["scoring"]["matching_skills"]:
                             st.write(f"✅ {s}")
                     else:
-                        st.write("No matches found.")
+                        st.write("No matching concepts found.")
                 with sk_col2:
-                    st.write("**Missing Skills:**")
+                    st.write("**Missing Semantic Concepts:**")
                     if res["scoring"]["missing_skills"]:
                         for s in res["scoring"]["missing_skills"]:
                             st.write(f"❌ {s}")
                     else:
-                        st.write("No missing skills!")
+                        st.write("No missing concepts!")
             
             with tab3:
                 m1, m2, m3 = st.columns(3)
@@ -172,7 +153,7 @@ if st.session_state.analysis_results:
                 
                 m1.metric("Action Verbs", len(exp_q.get("action_verbs", [])))
                 m2.metric("Metrics Found", exp_q.get("metrics_count", 0))
-                m3.metric("Sections", len(sec))
+                m3.metric("Sections Detected", len(sec))
                 
                 st.info(f"**Detected Sections:** {', '.join(sec) if sec else 'Standard structure detected.'}")
             
