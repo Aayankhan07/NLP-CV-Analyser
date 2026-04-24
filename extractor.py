@@ -8,16 +8,20 @@ def extract_email(nlp, doc):
     return None
 
 def extract_phone(nlp, doc):
-    # Pure NLP pattern matching for phone numbers using spaCy Matcher
-    # Removes regex. Looks for sequences of numbers and common punctuation.
-    matcher = Matcher(nlp.vocab)
-    pattern1 = [{"SHAPE": "ddd"}, {"TEXT": "-", "OP": "?"}, {"SHAPE": "ddd"}, {"TEXT": "-", "OP": "?"}, {"SHAPE": "dddd"}]
-    pattern2 = [{"TEXT": "+"}, {"SHAPE": "dd"}, {"SHAPE": "ddd"}, {"SHAPE": "ddddddd"}] 
-    matcher.add("PHONE", [pattern1, pattern2])
-    matches = matcher(doc)
-    if matches:
-        match_id, start, end = matches[0]
-        return doc[start:end].text
+    # Pure NLP contextual parsing: Look for tokens that are long numbers, 
+    # then look backwards for country code indicators like (+91)
+    for i, token in enumerate(doc):
+        # Identify the core of the phone number (7+ digits)
+        if token.is_digit and len(token.text) >= 7:
+            start = i
+            # Look backwards up to 3 tokens for country codes and brackets
+            for j in range(i - 1, max(-1, i - 4), -1):
+                prev_token = doc[j]
+                if prev_token.text in ["(", ")", "-", "+"] or prev_token.text.startswith("+"):
+                    start = j
+                else:
+                    break
+            return doc[start:i+1].text.strip()
     return None
 
 def extract_experience(nlp, doc):
