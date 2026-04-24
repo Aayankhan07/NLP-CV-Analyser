@@ -5,46 +5,63 @@ def score_cv(cv_facts: dict, cv_text: str, jd_text: str, nlp) -> dict:
     cv_doc = nlp(cv_text)
     jd_doc = nlp(jd_text)
     
-    # Phase 1: The Hard Gate
-    cv_filtered_text = " ".join([chunk.lemma_.lower() for chunk in cv_doc.noun_chunks if not chunk.root.is_stop])
-    jd_filtered_text = " ".join([chunk.lemma_.lower() for chunk in jd_doc.noun_chunks if not chunk.root.is_stop])
+    jd_concepts = set([chunk.lemma_.lower() for chunk in jd_doc.noun_chunks if not chunk.root.is_stop])
+    cv_concepts = set(cv_facts.get("skills", []))
     
-    cv_filt_doc = nlp(cv_filtered_text)
-    jd_filt_doc = nlp(jd_filtered_text)
-
-    if cv_filt_doc.has_vector and jd_filt_doc.has_vector:
-        base_similarity = cv_filt_doc.similarity(jd_filt_doc)
-        # EXTREME SCALING: We map the range [0.70, 0.85] to [0.0, 1.0].
-        # Anything below 0.70 base similarity is basically 0%.
-        adjusted_sim = max(0.0, min(1.0, (base_similarity - 0.70) / 0.15))
-        relevance_score = (adjusted_sim ** 3) * 100.0
+    # 1. Semantic Relevance (Concept-Level Semantic Match)
+    # Averaged document vectors are flawed because all professional resumes share "business" jargon.
+    # Instead, we do a rigorous Concept-by-Concept similarity check.
+    
+    cv_concept_docs = [nlp(c) for c in cv_concepts]
+    matched_count = 0
+    semantically_matched_concepts = set()
+    
+    for jd_c in jd_concepts:
+        # Exact match check first
+        if jd_c in cv_concepts:
+            matched_count += 1
+            semantically_matched_concepts.add(jd_c)
+            continue
+            
+        jd_c_doc = nlp(jd_c)
+        if not jd_c_doc.has_vector:
+            continue
+            
+        # Semantic overlap check
+        best_sim = 0.0
+        for cv_d in cv_concept_docs:
+            if cv_d.has_vector:
+                sim = jd_c_doc.similarity(cv_d)
+                if sim > best_sim:
+                    best_sim = sim
+                    
+        if best_sim >= 0.82: # Strict threshold for individual concepts
+            matched_count += 1
+            semantically_matched_concepts.add(jd_c)
+            
+    if len(jd_concepts) > 0:
+        relevance_score = (matched_count / len(jd_concepts)) * 100.0
     else:
-        relevance_score = 0.0
-        suggestions.append("Could not compute semantic similarity due to missing word vectors.")
+        relevance_score = 100.0
         
+    scores["Smart Skill Match"] = round(relevance_score, 2)
+    
     if relevance_score < 30.0:
         # Halt Phase 2
         overall_score = min(35.0, relevance_score + 5.0)
         suggestions.insert(0, "CRITICAL ALERT: This CV has <30% semantic overlap with the Job Description. Flagged as UNQUALIFIED.")
         return {
             "overall_score": round(overall_score, 2),
-            "category_scores": {"Semantic Relevance": round(relevance_score, 2)},
+            "category_scores": {"Smart Skill Match": round(relevance_score, 2)},
             "suggestions": suggestions,
-            "matching_skills": [],
-            "missing_skills": [],
-            "required_skills": [],
+            "matching_skills": list(semantically_matched_concepts),
+            "missing_skills": list(jd_concepts - semantically_matched_concepts),
+            "required_skills": list(jd_concepts),
             "is_unqualified": True
         }
         
     # Phase 2: The Hybrid Formula
-    
-    # 1. Smart Skill Match (50% Weight)
-    scores["Smart Skill Match"] = round(relevance_score, 2)
-    
-    jd_concepts = set([chunk.lemma_.lower() for chunk in jd_doc.noun_chunks if not chunk.root.is_stop])
-    cv_concepts = set(cv_facts.get("skills", []))
-    matching_concepts = jd_concepts.intersection(cv_concepts)
-    missing_concepts = jd_concepts - cv_concepts
+    missing_concepts = jd_concepts - semantically_matched_concepts
     extra_concepts = cv_concepts - jd_concepts
     
     if len(missing_concepts) > 0:
